@@ -16,6 +16,7 @@ services:
       retries: 10
 
   api:
+    restart: on-failure:5
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,11 +24,14 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://nlti:${POSTGRES_PASSWORD}@db:5432/nlti
       NLTI_ENV: development
+      NLTI_DOCUMENT_STORE: /var/lib/nlti/documents
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - document_data:/var/lib/nlti/documents
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -50,3 +54,4 @@ services:
 
 volumes:
   postgres_data:
+  document_data:

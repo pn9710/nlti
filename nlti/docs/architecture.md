@@ -7,6 +7,10 @@
 - **Web:** Next.js App Router, React, TypeScript, and Tailwind render a responsive procurement overview. Public dashboard totals come from database queries; no sample values are hard-coded.
 - **Matching:** The existing LangGraph wrapper calls a deterministic, explainable screening calculation. Scores are not eligibility determinations, award predictions, or bid-price guidance.
 - **Acquisition:** No connectors or scrapers are enabled. Procurement source metadata is reviewed before a source can appear in the public registry.
+- **Source operations:** Admin-only manual imports deduplicate by source reference, preserve retrieval times, record correction snapshots, archive only explicitly withdrawn references, and track health/run history.
+- **Document review:** Admins can upload public PDF/text files for hash-deduplicated local storage. A deterministic labeled-field parser records proposed fields and per-field confidence as a draft. Human approval is required before creating a public tender.
+- **Contractor workspace:** Contractors can update their own profile and opt into in-app notices with a minimum screening score. Production matching/notifications require email verification; notices cover upcoming opportunities only.
+- **Historical outcomes:** Admins can record independently verified public status with source provenance. Coverage displays missingness; no award prices or bidder identities are collected.
 
 ## Geography and notice lifecycle
 
@@ -16,20 +20,21 @@ The upcoming feed requires a published closing date on or after the current date
 
 ## Document-extraction architecture
 
-Extraction is deliberately a design boundary, not a live AI integration in this milestone. When enabled in a later milestone, a permitted public document should move through:
+Extraction uses a deterministic parser for explicitly labeled text only; there is no model provider or automatic document fetching. Each permitted public document moves through:
 
 1. Source registration and access/retention review.
 2. Retrieval with an immutable source URL, fetch time, checksum, and content type.
-3. Text extraction and proposed fields with extractor/model/prompt versions, per-field confidence, and warnings.
+3. Text extraction and proposed fields with extractor version, prompt version (`not-used` for the local parser), per-field confidence, and warnings.
 4. An unverified draft state that is not visible as a canonical tender.
 5. Human review against the original notice before any accepted values update public tender data.
 
-The source PDF remains authoritative. AI output must never invent a deadline, qualification, value, award, or eligibility result. Do not ingest private contractor documents until access controls, retention, and deletion behavior are explicitly implemented. There is no configured model provider, extraction job, or automated source access in the current app.
+The source PDF remains authoritative. Parser output must never invent a deadline, qualification, value, award, or eligibility result. Do not ingest private contractor documents. The local queue has admin-only document access and persistent storage, but production retention/deletion policy and any future model provider require separate review.
 
 ## Deferred responsibilities
 
-- Procurement Scout: add individual permitted source connectors only after source review.
-- Tender Analyst: implement the staged, human-reviewed extraction boundary above.
-- Opportunity Matcher: later improve profile-specific ranking with visible reasons and user controls.
+- Procurement Scout: add source-specific connectors only after lawful access, reuse rights, update method, and limits are reviewed.
+- Identity: add MFA, account recovery, and hardened production browser sessions before customer deployment.
+- Tender Analyst: any future model-assisted extraction must keep the unverified-draft and human-approval boundary.
+- Opportunity Matcher: improve ranking only with visible reasons and user controls; never present results as eligibility or award predictions.
 - Cost and market intelligence: require independently verified lawful public data; never infer or disclose confidential competing bids.
 - Compliance assistance: display listed requirements as unverified reminders, not legal advice or an eligibility decision.
