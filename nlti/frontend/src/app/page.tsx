@@ -263,20 +263,76 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void loadReferences();
-  }, [loadReferences]);
+    let active = true;
+    void (async () => {
+      const results = await Promise.allSettled([
+        api<Geography[]>("/geographies"),
+        api<Source[]>("/sources"),
+      ]);
+      if (!active) return;
+      if (results[0].status === "fulfilled") setGeographies(results[0].value);
+      else {
+        setNotice("Geography reference data is unavailable.");
+        setIsError(true);
+      }
+      if (results[1].status === "fulfilled") setSources(results[1].value);
+      else {
+        setNotice("The reviewed source registry is unavailable.");
+        setIsError(true);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    void loadSummary();
-  }, [loadSummary]);
+    let active = true;
+    void api<Summary>("/summary").then((value) => {
+      if (active) setSummary(value);
+    }).catch((error) => {
+      if (!active) return;
+      setNotice(`Dashboard totals are unavailable: ${error instanceof Error ? error.message : "API error"}`);
+      setIsError(true);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
+    let active = true;
+    void Promise.all([
+      api<HistoryCoverage>("/history/coverage"),
+      api<VerifiedOutcome[]>("/outcomes"),
+    ]).then(([coverage, verified]) => {
+      if (!active) return;
+      setHistoryCoverage(coverage);
+      setOutcomes(verified);
+    }).catch(() => {
+      if (!active) return;
+      setHistoryCoverage(null);
+      setOutcomes([]);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    void loadTenders();
-  }, [loadTenders]);
+    let active = true;
+    const params = new URLSearchParams({ limit: "100" });
+    if (appliedFilters.search) params.set("q", appliedFilters.search);
+    if (appliedFilters.region) params.set("region", appliedFilters.region);
+    if (appliedFilters.trade) params.set("trade", appliedFilters.trade);
+    void Promise.all([
+      api<Tender[]>(`/tenders/upcoming?${params}`),
+      api<Tender[]>(`/tenders/historical?${params}`),
+    ]).then(([next, past]) => {
+      if (!active) return;
+      setUpcoming(next);
+      setHistorical(past);
+    }).catch((error) => {
+      if (!active) return;
+      setNotice(`Tender data could not be loaded: ${error instanceof Error ? error.message : "API error"}`);
+      setIsError(true);
+    });
+    return () => { active = false; };
+  }, [appliedFilters]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("nlti_access_token");
@@ -306,13 +362,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!account) {
-      setProfile(null);
-      setNotifications([]);
-      setAccounts([]);
-      setDocuments([]);
-      return;
-    }
+    if (!account) return;
     const token = sessionStorage.getItem("nlti_access_token");
     if (!token) return;
     if (account.role === "contractor") {
@@ -329,11 +379,22 @@ export default function Home() {
     if (account.role === "admin") {
       void Promise.all([
         api<Account[]>("/accounts", token),
-        loadDocuments(token),
-      ]).then(([nextAccounts]) => setAccounts(nextAccounts))
+        api<PublicDocument[]>("/documents?status=needs_review", token),
+      ]).then(([nextAccounts, rows]) => {
+        setAccounts(nextAccounts);
+        setDocuments(rows);
+        setDocumentDrafts(Object.fromEntries(rows.map((document) => [document.id, {
+          title: document.proposed_fields.title ?? "",
+          location: document.proposed_fields.location ?? "",
+          region: document.proposed_fields.region ?? "",
+          closing_date: document.proposed_fields.closing_date ?? "",
+          source_reference: document.proposed_fields.source_reference ?? "",
+          status: "open",
+        }])));
+      })
         .catch(() => setWorkflowNotice("Administrative workflow data is unavailable."));
     }
-  }, [account, loadDocuments]);
+  }, [account]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -395,6 +456,12 @@ export default function Home() {
   function signOut() {
     sessionStorage.removeItem("nlti_access_token");
     setAccount(null);
+    setProfile(null);
+    setNotifications([]);
+    setAccounts([]);
+    setDocuments([]);
+    setNotificationPreferences({ enabled: false, minimum_match_score: 0 });
+    setVerificationUrl("");
   }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
